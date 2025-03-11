@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 env:
-  AZURE_FUNCTIONAPP_NAME: ${{ secrets.AZURE_FUNCTIONAPP_NAME }}
+  AZURE_FUNCTIONAPP_NAME: 'RapportAnalys'
   AZURE_FUNCTIONAPP_PACKAGE_PATH: '.'
   PYTHON_VERSION: '3.11'
 
