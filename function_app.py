@@ -362,7 +362,7 @@ def weather_api_caller():
 
     weather_df = weather_df[['datetime', 'temp', 'rain', 'weather_code']]
 
-    wmo_df = pd.read_json('WMO_codes.json')
+    wmo_df = pd.read_json('weather_data/WMO_codes.json')
     weather_descriptions = {}
     for code in wmo_df.columns:
         description = wmo_df[code]['night']['description']
@@ -384,7 +384,7 @@ def weather_api_caller():
         }
 
     # Save to JSON with proper formatting
-    with open('weather_data.json', 'w', encoding='utf-8') as f:
+    with open('weather_data/weather_data.json', 'w', encoding='utf-8') as f:
         json.dump(weather_dict, f, ensure_ascii=False, indent=4)
 
     return final_weather_df
