@@ -10,6 +10,11 @@ import markdown
 import smtplib
 import json
 import os
+import fireducks.pandas as pd
+import openmeteo_requests
+import requests_cache
+import requests
+from retry_requests import retry
 
 
 
@@ -288,3 +293,98 @@ def fetch_digester(myTimer: func.TimerRequest) -> None:
 
     except Exception as e:
         logging.error(f"Error uploading updated blob: {e}")
+
+
+def weather_api_caller():
+    """
+    Calls Open-Meteo API for historical weather data.
+
+    This function retrieves data - observed weather, temperature (degrees C) and rain (mm)- per hour 
+    for the last 24 hours and saves it as a structured json file.
+
+    Returns:
+        pd.DataFrame: A DataFrame containing the weather data.
+    """
+
+    cache_session = requests_cache.CachedSession('.cache', expire_after = -1)
+    retry_session = retry(cache_session, retries = 5, backoff_factor = 0.2)
+    openmeteo = openmeteo_requests.Client(session = retry_session)
+
+    url = "https://archive-api.open-meteo.com/v1/archive"
+
+    lat = 59.33
+    long = 18.00
+
+    start_date = str(datetime.date.today() + datetime.timedelta(days=-1))
+    end_date = str(datetime.date.today())
+    start_formatted = start_date.strftime("%Y-%m-%d")
+    end_formatted = end_date.strftime("%Y-%m-%d")
+
+    params = {
+	"latitude": lat,
+	"longitude": long,
+	"start_date": start_formatted,
+	"end_date": end_formatted,
+	"hourly": ["temperature_2m", "rain", "weather_code"]
+    }
+
+    try:
+        responses = openmeteo.weather_api(url, params=params)
+        response = responses[0]
+    except requests.exceptions.RequestException as e:
+        print(f"Error making SER API request: {e}")
+        return None
+
+    # Process hourly data. The order of variables needs to be the same as requested.
+    hourly = response.Hourly()
+    hourly_temperature_2m = hourly.Variables(0).ValuesAsNumpy()
+    hourly_rain = hourly.Variables(1).ValuesAsNumpy()
+    hourly_weather_code = hourly.Variables(2).ValuesAsNumpy()
+
+    hourly_data = {"date": pd.date_range(
+        start = pd.to_datetime(hourly.Time(), unit = "s", utc = True),
+        end = pd.to_datetime(hourly.TimeEnd(), unit = "s", utc = True),
+        freq = pd.Timedelta(seconds = hourly.Interval()),
+        inclusive = "left"
+    )}
+
+    hourly_data["temperature_2m"] = hourly_temperature_2m
+    hourly_data["rain"] = hourly_rain
+    hourly_data["weather_code"] = hourly_weather_code
+
+    weather_df = pd.DataFrame(data = hourly_data)
+
+    weather_df['datetime'] = weather_df['date'].dt.strftime('%Y-%m-%d %H:%M')
+    weather_df['temp'] = weather_df['temperature_2m'].round(0)
+
+    weather_df = weather_df.drop(columns=['date'])
+    weather_df = weather_df.drop(columns=['temperature_2m'])
+
+    weather_df = weather_df[['datetime', 'temp', 'rain', 'weather_code']]
+
+    wmo_df = pd.read_json('WMO_codes.json')
+    weather_descriptions = {}
+    for code in wmo_df.columns:
+        description = wmo_df[code]['night']['description']
+        weather_descriptions[int(code)] = description
+
+    wmo_df = pd.DataFrame(list(weather_descriptions.items()), columns=['code', 'description'])
+    wmo_df = wmo_df.rename(columns={'description': 'weather_description'})
+    final_wmo_df = wmo_df.rename(columns={'code': 'weather_code'})
+
+    final_weather_df = weather_df.merge(final_wmo_df, on='weather_code', how='left')
+
+    weather_dict = {}
+    for _, row in final_weather_df.iterrows():
+        weather_dict[row['datetime']] = {
+            'temp': row['temp'],
+            'rain': row['rain'],
+            'weather_code': row['weather_code'],
+            'weather_description': row['weather_description']
+        }
+
+    # Save to JSON with proper formatting
+    with open('weather_data.json', 'w', encoding='utf-8') as f:
+        json.dump(weather_dict, f, ensure_ascii=False, indent=4)
+
+    return final_weather_df
