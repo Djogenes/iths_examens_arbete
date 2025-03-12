@@ -7,3 +7,6 @@ azure-storage-blob==12.24.1
 openai==1.63.2
 requests==2.31.0
 markdown==3.7
+requests-cache>=1.2.1
+retry-requests>=2.0.0
+fireducks>=1.2.4
