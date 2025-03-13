@@ -362,17 +362,37 @@ def weather_api_caller():
 
     weather_df = weather_df[['datetime', 'temp', 'rain', 'weather_code']]
 
-    wmo_df = pd.read_json('weather_data/WMO_codes.json')
-    weather_descriptions = {}
-    for code in wmo_df.columns:
-        description = wmo_df[code]['night']['description']
-        weather_descriptions[int(code)] = description
-
-    wmo_df = pd.DataFrame(list(weather_descriptions.items()), columns=['code', 'description'])
-    wmo_df = wmo_df.rename(columns={'description': 'weather_description'})
-    final_wmo_df = wmo_df.rename(columns={'code': 'weather_code'})
-
-    final_weather_df = weather_df.merge(final_wmo_df, on='weather_code', how='left')
+    weather_code_descriptions = {0: 'Klart',
+                             1: 'Mestadels klart',
+                             2: 'Devlis molnigt',
+                             3: 'Molnigt',
+                             45: 'Dimmigt',
+                             48: 'Dimma och rimfrost',
+                             51: 'Lätt duggregn',
+                             53:'Duggregn',
+                             55: 'Kraftigt duggregn',
+                             56: 'Lätt underkylt duggregn',
+                             57: 'Underkylt duggregn',
+                             61: 'Lätt regn',
+                             63: 'Regn',
+                             65: 'Kraftigt regn',
+                             66: 'Lätt underkylt regn',
+                             67: 'Underkylt regn',
+                             71: 'Lätt snöfall',
+                             73: 'Snöfall',
+                             75: 'Kraftigt snöfall',
+                             77: 'Snökorn',
+                             80: 'Lätta skurar',
+                             81: 'Skurar',
+                             82: 'Kraftiga skurar',
+                             85: 'Lätta snöskurar',
+                             86: 'Snöskurar',
+                             95: 'Åskväder',
+                             96: 'Lätt åskväder med hagel',
+                             99: 'Åskväder med hagel'}
+    
+    final_weather_df = weather_df.copy()
+    final_weather_df['weather_description'] = final_weather_df['weather_code'].map(weather_code_descriptions)
 
     weather_dict = {}
     for _, row in final_weather_df.iterrows():
