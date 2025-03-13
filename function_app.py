@@ -402,12 +402,14 @@ def weather_api_caller():
                 'weather_description': row['weather_description']
             }
         
-        os.makedirs('weather_data', exist_ok=True)
+        weather_blob_name = "weather_data.json"
+        try:
+            weather_blob_client = container_client.get_blob_client(weather_blob_name)
+            weather_blob_client.upload_blob(json.dumps(weather_dict, ensure_ascii=False), overwrite=True)
+            logging.info(f"Successfully uploaded weather data to blob {weather_blob_name}")
+        except Exception as e:
+            logging.error(f"Error uploading weather data to blob: {e}")
 
-        with open('weather_data/weather_data.json', 'w', encoding='utf-8') as f:
-            json.dump(weather_dict, f, ensure_ascii=False, indent=4)
-
-        logging.info("Weather data successfully saved to JSON file")
         return final_weather_df
     
     except Exception as e:
