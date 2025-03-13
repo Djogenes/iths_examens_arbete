@@ -305,104 +305,111 @@ def weather_api_caller():
     Returns:
         pd.DataFrame: A DataFrame containing the weather data.
     """
-
-    cache_session = requests_cache.CachedSession('.cache', expire_after = -1)
-    retry_session = retry(cache_session, retries = 5, backoff_factor = 0.2)
-    openmeteo = openmeteo_requests.Client(session = retry_session)
-
-    url = "https://archive-api.open-meteo.com/v1/archive"
-
-    lat = 59.33
-    long = 18.00
-
-    start_date = str(datetime.date.today() + datetime.timedelta(days=-1))
-    end_date = str(datetime.date.today())
-    start_formatted = start_date.strftime("%Y-%m-%d")
-    end_formatted = end_date.strftime("%Y-%m-%d")
-
-    params = {
-	"latitude": lat,
-	"longitude": long,
-	"start_date": start_formatted,
-	"end_date": end_formatted,
-	"hourly": ["temperature_2m", "rain", "weather_code"]
-    }
-
     try:
-        responses = openmeteo.weather_api(url, params=params)
-        response = responses[0]
-    except requests.exceptions.RequestException as e:
-        print(f"Error making Open-Meteo API request: {e}")
-        return None
+        cache_session = requests_cache.CachedSession('.cache', expire_after = -1)
+        retry_session = retry(cache_session, retries = 5, backoff_factor = 0.2)
+        openmeteo = openmeteo_requests.Client(session = retry_session)
 
-    # Process hourly data. The order of variables needs to be the same as requested.
-    hourly = response.Hourly()
-    hourly_temperature_2m = hourly.Variables(0).ValuesAsNumpy()
-    hourly_rain = hourly.Variables(1).ValuesAsNumpy()
-    hourly_weather_code = hourly.Variables(2).ValuesAsNumpy()
+        url = "https://archive-api.open-meteo.com/v1/archive"
 
-    hourly_data = {"date": pd.date_range(
-        start = pd.to_datetime(hourly.Time(), unit = "s", utc = True),
-        end = pd.to_datetime(hourly.TimeEnd(), unit = "s", utc = True),
-        freq = pd.Timedelta(seconds = hourly.Interval()),
-        inclusive = "left"
-    )}
+        lat = 59.33
+        long = 18.00
 
-    hourly_data["temperature_2m"] = hourly_temperature_2m
-    hourly_data["rain"] = hourly_rain
-    hourly_data["weather_code"] = hourly_weather_code
+        start_date = str(datetime.date.today() + datetime.timedelta(days=-1))
+        end_date = str(datetime.date.today())
+        start_formatted = start_date.strftime("%Y-%m-%d")
+        end_formatted = end_date.strftime("%Y-%m-%d")
 
-    weather_df = pd.DataFrame(data = hourly_data)
-
-    weather_df['datetime'] = weather_df['date'].dt.strftime('%Y-%m-%d %H:%M')
-    weather_df['temp'] = weather_df['temperature_2m'].round(0)
-    
-    weather_df = weather_df[['datetime', 'temp', 'rain', 'weather_code']]
-
-    weather_code_dict = {
-        0: 'Klart',
-        1: 'Mestadels klart', 
-        2: 'Delvis molnigt',
-        3: 'Molnigt',
-        45: 'Dimmigt',
-        48: 'Dimma och rimfrost',
-        51: 'Lätt duggregn',
-        53: 'Duggregn',
-        55: 'Kraftigt duggregn',
-        56: 'Lätt underkylt duggregn',
-        57: 'Underkylt duggregn',
-        61: 'Lätt regn',
-        63: 'Regn',
-        65: 'Kraftigt regn',
-        66: 'Lätt underkylt regn',
-        67: 'Underkylt regn',
-        71: 'Lätt snöfall',
-        73: 'Snöfall',
-        75: 'Kraftigt snöfall',
-        77: 'Snökorn',
-        80: 'Lätta skurar',
-        81: 'Skurar',
-        82: 'Kraftiga skurar',
-        85: 'Lätta snöskurar',
-        86: 'Snöskurar',
-        95: 'Åskväder',
-        96: 'Lätt åskväder med hagel',
-        99: 'Åskväder med hagel'
-    }
-    
-    final_weather_df = weather_df.copy()
-    final_weather_df['weather_description'] = final_weather_df['weather_code'].map(weather_code_dict)
-
-    weather_dict = {}
-    for _, row in final_weather_df.iterrows():
-        weather_dict[row['datetime']] = {
-            'temp': row['temp'],
-            'rain': row['rain'],
-            'weather_code': row['weather_code'],
-            'weather_description': row['weather_description']
+        params = {
+        "latitude": lat,
+        "longitude": long,
+        "start_date": start_formatted,
+        "end_date": end_formatted,
+        "hourly": ["temperature_2m", "rain", "weather_code"]
         }
 
-    with open('weather_data/weather_data.json', 'w', encoding='utf-8') as f:
-        json.dump(weather_dict, f, ensure_ascii=False, indent=4)
+        try:
+            responses = openmeteo.weather_api(url, params=params)
+            response = responses[0]
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Error making Open-Meteo API request: {e}")
+            return None
 
-    return final_weather_df
+        # Process hourly data. The order of variables needs to be the same as requested.
+        hourly = response.Hourly()
+        hourly_temperature_2m = hourly.Variables(0).ValuesAsNumpy()
+        hourly_rain = hourly.Variables(1).ValuesAsNumpy()
+        hourly_weather_code = hourly.Variables(2).ValuesAsNumpy()
+
+        hourly_data = {"date": pd.date_range(
+            start = pd.to_datetime(hourly.Time(), unit = "s", utc = True),
+            end = pd.to_datetime(hourly.TimeEnd(), unit = "s", utc = True),
+            freq = pd.Timedelta(seconds = hourly.Interval()),
+            inclusive = "left"
+        )}
+
+        hourly_data["temperature_2m"] = hourly_temperature_2m
+        hourly_data["rain"] = hourly_rain
+        hourly_data["weather_code"] = hourly_weather_code
+
+        weather_df = pd.DataFrame(data = hourly_data)
+
+        weather_df['datetime'] = weather_df['date'].dt.strftime('%Y-%m-%d %H:%M')
+        weather_df['temp'] = weather_df['temperature_2m'].round(0)
+        
+        weather_df = weather_df[['datetime', 'temp', 'rain', 'weather_code']]
+
+        weather_code_dict = {
+            0: 'Klart',
+            1: 'Mestadels klart', 
+            2: 'Delvis molnigt',
+            3: 'Molnigt',
+            45: 'Dimmigt',
+            48: 'Dimma och rimfrost',
+            51: 'Lätt duggregn',
+            53: 'Duggregn',
+            55: 'Kraftigt duggregn',
+            56: 'Lätt underkylt duggregn',
+            57: 'Underkylt duggregn',
+            61: 'Lätt regn',
+            63: 'Regn',
+            65: 'Kraftigt regn',
+            66: 'Lätt underkylt regn',
+            67: 'Underkylt regn',
+            71: 'Lätt snöfall',
+            73: 'Snöfall',
+            75: 'Kraftigt snöfall',
+            77: 'Snökorn',
+            80: 'Lätta skurar',
+            81: 'Skurar',
+            82: 'Kraftiga skurar',
+            85: 'Lätta snöskurar',
+            86: 'Snöskurar',
+            95: 'Åskväder',
+            96: 'Lätt åskväder med hagel',
+            99: 'Åskväder med hagel'
+        }
+        
+        final_weather_df = weather_df.copy()
+        final_weather_df['weather_description'] = final_weather_df['weather_code'].map(weather_code_dict)
+
+        weather_dict = {}
+        for _, row in final_weather_df.iterrows():
+            weather_dict[row['datetime']] = {
+                'temp': row['temp'],
+                'rain': row['rain'],
+                'weather_code': row['weather_code'],
+                'weather_description': row['weather_description']
+            }
+        
+        os.makedirs('weather_data', exist_ok=True)
+
+        with open('weather_data/weather_data.json', 'w', encoding='utf-8') as f:
+            json.dump(weather_dict, f, ensure_ascii=False, indent=4)
+
+        logging.info("Weather data successfully saved to JSON file")
+        return final_weather_df
+    
+    except Exception as e:
+        logging.error(f"Unexpected error in weather_api_caller: {e}")
+        return None
