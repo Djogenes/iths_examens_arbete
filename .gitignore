@@ -10,16 +10,19 @@ Publish
 *.suo
 *.cscfg
 *.Cache
+.cache/
 project.lock.json
 
 /packages
 /TestResults
+/ongoing_work/
 
 /tools/NuGet.exe
 /App_Data
 /secrets
 /data
 .secrets
+.idea/
 appsettings.json
 local.settings.json
 
@@ -32,11 +35,15 @@ dist
 # Python Environments
 .env
 .venv
+.venv/
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
+uv.lock
+pyproject.toml
+.python-version
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -50,4 +57,4 @@ __azurite_db*__.json
 
 # Test Scripts
 test.py
-
+test.ipynb

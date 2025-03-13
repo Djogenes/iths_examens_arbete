@@ -10,6 +10,11 @@ import markdown
 import smtplib
 import json
 import os
+import fireducks.pandas as pd
+import openmeteo_requests
+import requests_cache
+import requests
+from retry_requests import retry
 
 
 
@@ -288,3 +293,125 @@ def fetch_digester(myTimer: func.TimerRequest) -> None:
 
     except Exception as e:
         logging.error(f"Error uploading updated blob: {e}")
+
+
+def weather_api_caller():
+    """
+    Calls Open-Meteo API for historical weather data.
+
+    This function retrieves data - observed weather, temperature (degrees C) and rain (mm)- per hour 
+    for the last 24 hours and saves it as a structured json file.
+
+    Returns:
+        pd.DataFrame: A DataFrame containing the weather data.
+    """
+    try:
+        cache_session = requests_cache.CachedSession('.cache', expire_after = -1)
+        retry_session = retry(cache_session, retries = 5, backoff_factor = 0.2)
+        openmeteo = openmeteo_requests.Client(session = retry_session)
+
+        url = "https://archive-api.open-meteo.com/v1/archive"
+
+        lat = 59.33
+        long = 18.00
+
+        start_date = str(datetime.date.today() + datetime.timedelta(days=-1))
+        end_date = str(datetime.date.today())
+        start_formatted = start_date.strftime("%Y-%m-%d")
+        end_formatted = end_date.strftime("%Y-%m-%d")
+
+        params = {
+        "latitude": lat,
+        "longitude": long,
+        "start_date": start_formatted,
+        "end_date": end_formatted,
+        "hourly": ["temperature_2m", "rain", "weather_code"]
+        }
+
+        try:
+            responses = openmeteo.weather_api(url, params=params)
+            response = responses[0]
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Error making Open-Meteo API request: {e}")
+            return None
+
+        # Process hourly data. The order of variables needs to be the same as requested.
+        hourly = response.Hourly()
+        hourly_temperature_2m = hourly.Variables(0).ValuesAsNumpy()
+        hourly_rain = hourly.Variables(1).ValuesAsNumpy()
+        hourly_weather_code = hourly.Variables(2).ValuesAsNumpy()
+
+        hourly_data = {"date": pd.date_range(
+            start = pd.to_datetime(hourly.Time(), unit = "s", utc = True),
+            end = pd.to_datetime(hourly.TimeEnd(), unit = "s", utc = True),
+            freq = pd.Timedelta(seconds = hourly.Interval()),
+            inclusive = "left"
+        )}
+
+        hourly_data["temperature_2m"] = hourly_temperature_2m
+        hourly_data["rain"] = hourly_rain
+        hourly_data["weather_code"] = hourly_weather_code
+
+        weather_df = pd.DataFrame(data = hourly_data)
+
+        weather_df['datetime'] = weather_df['date'].dt.strftime('%Y-%m-%d %H:%M')
+        weather_df['temp'] = weather_df['temperature_2m'].round(0)
+        
+        weather_df = weather_df[['datetime', 'temp', 'rain', 'weather_code']]
+
+        weather_code_dict = {
+            0: 'Klart',
+            1: 'Mestadels klart', 
+            2: 'Delvis molnigt',
+            3: 'Molnigt',
+            45: 'Dimmigt',
+            48: 'Dimma och rimfrost',
+            51: 'Lätt duggregn',
+            53: 'Duggregn',
+            55: 'Kraftigt duggregn',
+            56: 'Lätt underkylt duggregn',
+            57: 'Underkylt duggregn',
+            61: 'Lätt regn',
+            63: 'Regn',
+            65: 'Kraftigt regn',
+            66: 'Lätt underkylt regn',
+            67: 'Underkylt regn',
+            71: 'Lätt snöfall',
+            73: 'Snöfall',
+            75: 'Kraftigt snöfall',
+            77: 'Snökorn',
+            80: 'Lätta skurar',
+            81: 'Skurar',
+            82: 'Kraftiga skurar',
+            85: 'Lätta snöskurar',
+            86: 'Snöskurar',
+            95: 'Åskväder',
+            96: 'Lätt åskväder med hagel',
+            99: 'Åskväder med hagel'
+        }
+        
+        final_weather_df = weather_df.copy()
+        final_weather_df['weather_description'] = final_weather_df['weather_code'].map(weather_code_dict)
+
+        weather_dict = {}
+        for _, row in final_weather_df.iterrows():
+            weather_dict[row['datetime']] = {
+                'temp': row['temp'],
+                'rain': row['rain'],
+                'weather_code': row['weather_code'],
+                'weather_description': row['weather_description']
+            }
+        
+        weather_blob_name = "weather_data.json"
+        try:
+            weather_blob_client = container_client.get_blob_client(weather_blob_name)
+            weather_blob_client.upload_blob(json.dumps(weather_dict, ensure_ascii=False), overwrite=True)
+            logging.info(f"Successfully uploaded weather data to blob {weather_blob_name}")
+        except Exception as e:
+            logging.error(f"Error uploading weather data to blob: {e}")
+
+        return final_weather_df
+    
+    except Exception as e:
+        logging.error(f"Unexpected error in weather_api_caller: {e}")
+        return None
