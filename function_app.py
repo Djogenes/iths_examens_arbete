@@ -332,7 +332,7 @@ def weather_api_caller():
         responses = openmeteo.weather_api(url, params=params)
         response = responses[0]
     except requests.exceptions.RequestException as e:
-        print(f"Error making SER API request: {e}")
+        print(f"Error making Open-Meteo API request: {e}")
         return None
 
     # Process hourly data. The order of variables needs to be the same as requested.
@@ -356,43 +356,42 @@ def weather_api_caller():
 
     weather_df['datetime'] = weather_df['date'].dt.strftime('%Y-%m-%d %H:%M')
     weather_df['temp'] = weather_df['temperature_2m'].round(0)
-
-    weather_df = weather_df.drop(columns=['date'])
-    weather_df = weather_df.drop(columns=['temperature_2m'])
-
+    
     weather_df = weather_df[['datetime', 'temp', 'rain', 'weather_code']]
 
-    weather_code_descriptions = {0: 'Klart',
-                             1: 'Mestadels klart',
-                             2: 'Devlis molnigt',
-                             3: 'Molnigt',
-                             45: 'Dimmigt',
-                             48: 'Dimma och rimfrost',
-                             51: 'Lätt duggregn',
-                             53:'Duggregn',
-                             55: 'Kraftigt duggregn',
-                             56: 'Lätt underkylt duggregn',
-                             57: 'Underkylt duggregn',
-                             61: 'Lätt regn',
-                             63: 'Regn',
-                             65: 'Kraftigt regn',
-                             66: 'Lätt underkylt regn',
-                             67: 'Underkylt regn',
-                             71: 'Lätt snöfall',
-                             73: 'Snöfall',
-                             75: 'Kraftigt snöfall',
-                             77: 'Snökorn',
-                             80: 'Lätta skurar',
-                             81: 'Skurar',
-                             82: 'Kraftiga skurar',
-                             85: 'Lätta snöskurar',
-                             86: 'Snöskurar',
-                             95: 'Åskväder',
-                             96: 'Lätt åskväder med hagel',
-                             99: 'Åskväder med hagel'}
+    weather_code_dict = {
+        0: 'Klart',
+        1: 'Mestadels klart', 
+        2: 'Delvis molnigt',
+        3: 'Molnigt',
+        45: 'Dimmigt',
+        48: 'Dimma och rimfrost',
+        51: 'Lätt duggregn',
+        53: 'Duggregn',
+        55: 'Kraftigt duggregn',
+        56: 'Lätt underkylt duggregn',
+        57: 'Underkylt duggregn',
+        61: 'Lätt regn',
+        63: 'Regn',
+        65: 'Kraftigt regn',
+        66: 'Lätt underkylt regn',
+        67: 'Underkylt regn',
+        71: 'Lätt snöfall',
+        73: 'Snöfall',
+        75: 'Kraftigt snöfall',
+        77: 'Snökorn',
+        80: 'Lätta skurar',
+        81: 'Skurar',
+        82: 'Kraftiga skurar',
+        85: 'Lätta snöskurar',
+        86: 'Snöskurar',
+        95: 'Åskväder',
+        96: 'Lätt åskväder med hagel',
+        99: 'Åskväder med hagel'
+    }
     
     final_weather_df = weather_df.copy()
-    final_weather_df['weather_description'] = final_weather_df['weather_code'].map(weather_code_descriptions)
+    final_weather_df['weather_description'] = final_weather_df['weather_code'].map(weather_code_dict)
 
     weather_dict = {}
     for _, row in final_weather_df.iterrows():
@@ -403,7 +402,6 @@ def weather_api_caller():
             'weather_description': row['weather_description']
         }
 
-    # Save to JSON with proper formatting
     with open('weather_data/weather_data.json', 'w', encoding='utf-8') as f:
         json.dump(weather_dict, f, ensure_ascii=False, indent=4)
 
